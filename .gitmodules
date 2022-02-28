@@ -1,0 +1,6 @@
+[submodule "external/minio"]
+	path = external/minio
+	url = git@github.com:minio/minio.git
+[submodule "external/minio-go"]
+	path = external/minio-go
+	url = git@github.com:minio/minio-go.git
