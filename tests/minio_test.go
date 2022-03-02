@@ -29,7 +29,7 @@ func TestMinioClient(t *testing.T) {
 		Secure: secure,
 	})
 	if err != nil {
-		log.Fatalln(err)
+		log.Fatalln("minio.New() failed: ", err)
 	}
 
 	client = cli
@@ -46,17 +46,17 @@ func TestMinioBucket(t *testing.T) {
 	err := client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: location})
 	if err != nil {
 		if exists, _ := client.BucketExists(ctx, bucketName); !exists {
-			log.Fatalln(err)
+			log.Fatalln("minio.MakeBucket() failed: ", err)
 		}
 	} else {
-		log.Fatalln(err)
+		log.Fatalln("minio.MakeBucket() failed: ", err)
 	}
 }
 
 const (
-	objectName  = "minio_test"
-	objectPath  = "minio_test"
-	contentType = ""
+	objectName  = "2022-03-01"
+	objectPath  = "2022-03-01"
+	contentType = "application/octet-stream"
 )
 
 func TestMinioUpload(t *testing.T) {
@@ -69,7 +69,7 @@ func TestMinioUpload(t *testing.T) {
 	log.Printf("Successfully uploaded %s of size %d\n", objectName, info.Size)
 }
 
-var destPath = "minio_test." + time.Now().Format("2006-01-02 15:04:05")
+var destPath = "2022-03-01 " + time.Now().Format("15:04:05")
 
 func TestMinioDownload(t *testing.T) {
 	TestMinioBucket(t)
