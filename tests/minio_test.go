@@ -2,7 +2,9 @@ package tests
 
 import (
 	"context"
+	"io"
 	"log"
+	"os"
 	"testing"
 	"time"
 
@@ -24,6 +26,47 @@ var (
 )
 
 func TestMinioClient(t *testing.T) {
+	minioClient()
+}
+
+func TestMinioMakeBucket(t *testing.T) {
+	minioMakeBucket()
+}
+
+func TestMinioPutObject(t *testing.T) {
+	minioMakeBucket()
+
+	// 获取字节流
+	file, err := os.Open(objectPath)
+	if err != nil {
+		log.Fatalln("os.Open() failed: ", err)
+	}
+	defer file.Close()
+
+	fileStat, err := file.Stat()
+	if err != nil {
+		log.Fatalln("file.Stat() failed: ", err)
+	}
+
+	minioPutObject(file, fileStat.Size())
+}
+
+var destPath = "2022-03-01 " + time.Now().Format("15:04:05")
+
+func TestMinioGetObject(t *testing.T) {
+	minioMakeBucket()
+
+	obj := minioGetObject()
+	file, err := os.OpenFile(destPath, os.O_CREATE|os.O_RDWR, 0755)
+	if err != nil {
+		log.Fatalln("os.OpenFile() failed: ", err)
+	}
+	defer file.Close()
+
+	io.Copy(file, obj)
+}
+
+func minioClient() {
 	cli, err := minio.New(endpoint, &minio.Options{
 		Creds:  credentials.NewStaticV4(user, password, ""),
 		Secure: secure,
@@ -40,15 +83,14 @@ const (
 	location   = "us-east-1"
 )
 
-func TestMinioBucket(t *testing.T) {
-	TestMinioClient(t)
+func minioMakeBucket() {
+	minioClient()
 
 	err := client.MakeBucket(ctx, bucketName, minio.MakeBucketOptions{Region: location})
 	if err != nil {
-		if exists, _ := client.BucketExists(ctx, bucketName); !exists {
-			log.Fatalln("minio.MakeBucket() failed: ", err)
+		if exists, _ := client.BucketExists(ctx, bucketName); exists {
+			return
 		}
-	} else {
 		log.Fatalln("minio.MakeBucket() failed: ", err)
 	}
 }
@@ -59,23 +101,18 @@ const (
 	contentType = "application/octet-stream"
 )
 
-func TestMinioUpload(t *testing.T) {
-	TestMinioBucket(t)
-
-	info, err := client.FPutObject(ctx, bucketName, objectName, objectPath, minio.PutObjectOptions{ContentType: contentType})
+func minioPutObject(obj io.Reader, size int64) {
+	info, err := client.PutObject(ctx, bucketName, objectName, obj, size, minio.PutObjectOptions{ContentType: contentType})
 	if err != nil {
-		log.Fatalln("minio.FPutObject() failed: ", err)
+		log.Fatalln("minio.PutObject() failed: ", err)
 	}
 	log.Printf("Successfully uploaded %s of size %d\n", objectName, info.Size)
 }
 
-var destPath = "2022-03-01 " + time.Now().Format("15:04:05")
-
-func TestMinioDownload(t *testing.T) {
-	TestMinioBucket(t)
-
-	err := client.FGetObject(ctx, bucketName, objectName, destPath, minio.GetObjectOptions{})
+func minioGetObject() *minio.Object {
+	obj, err := client.GetObject(ctx, bucketName, objectName, minio.GetObjectOptions{})
 	if err != nil {
 		log.Fatalln("minio.FGetObject() failed: ", err)
 	}
+	return obj
 }
