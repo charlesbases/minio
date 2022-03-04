@@ -14,4 +14,4 @@ down:
 	docker-compose -f docker-compose/docker-compose.yml down
 
 files:
-	go test tools/files_test.go
+	go test -v -run TestFiles ./tests
