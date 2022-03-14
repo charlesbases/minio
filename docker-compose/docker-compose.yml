@@ -1,8 +1,7 @@
 version: '3.8'
 
 networks:
- default:
-  external:
+  default:
     name: minio
 
 # Settings and configurations that are common for all containers
@@ -90,7 +89,6 @@ services:
       TZ: Asia/Shanghai
     volumes:
       - /opt/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
-      - /opt/nginx/nginx.pid:/var/run/nginx.pid
       - /opt/nginx/logs:/var/log/nginx
     ports:
       - "9000:9000"
