@@ -70,10 +70,10 @@ MinIO 使用纠删码来校验和保护数据免受硬件故障和静默数据�
   $ nano /etc/fstab
   
     # <file system>  <mount point>  <type>  <options>         <dump>  <pass>
-    LABEL=DISK1      /mnt/disk1     xfs     defaults,noatime  0       2
-    LABEL=DISK2      /mnt/disk2     xfs     defaults,noatime  0       2
-    LABEL=DISK3      /mnt/disk3     xfs     defaults,noatime  0       2
-    LABEL=DISK4      /mnt/disk4     xfs     defaults,noatime  0       2
+    LABEL=DISK1        /mnt/disk1         xfs     defaults,noatime        0             2
+    LABEL=DISK2        /mnt/disk2         xfs     defaults,noatime        0             2
+    LABEL=DISK3        /mnt/disk3         xfs     defaults,noatime        0             2
+    LABEL=DISK4        /mnt/disk4         xfs     defaults,noatime        0             2
   ```
 
 - ###### 网络文件系统卷破坏一致性保证
@@ -88,18 +88,120 @@ MinIO 使用纠删码来校验和保护数据免受硬件故障和静默数据�
 
 ##### 2.2 分布式集群
 
+```
+  分布式 MinIO 可以让你将多块硬盘（甚至在不同的机器上、或不同机房的机器）组成一个对象存储服务（OSS，Object Storage Service）。由于硬盘分布在不同的节点上，分布式 MinIO 避免了单点故障。
+```
 
+![](.pictures/DistributedCluster.png)
+
+```
+minio server http://host{1...4}/export{1...4}
+
+等价于：
+
+minio server http://host1/export1 http://host1/export2  http://host1/export3 http://host1/export4
+             http://host2/export1 http://host2/export2  http://host2/export3 http://host2/export4
+             http://host3/export1 http://host3/export2  http://host3/export3 http://host3/export4
+             http://host4/export1 http://host4/export2  http://host4/export3 http://host4/export4     
+```
+
+- ###### 分布式部署可靠性的常用方法
+
+  ```
+      分布式存储，很关键的点在于数据的可靠性，即保证数据的完整，不丢失、不损坏。只有在可靠性实现的前提下，才有了追求一致性、高可用、高性能的基础。而对于存储领域，一般对于保证数据可靠性的方法主要有两类，一类是冗余法，一类是校验法。
+  ```
+
+  - ###### 冗余
+
+    ​    即对存储的数据进行副本备份，当数据出现丢失、损坏。即可使用备份内容恢复，而副本备份的多少，决定了数据可靠的高低。这其中会有成本的考量，副本数据越多，数据越可靠，但同时磁盘利用率越低。可靠性是允许丢失其中一份数据。当前已有很多分布式系统是采用此种方式实现，如 Hadoop 的文件系统 （3个副本）、Redis 集群、MySQL 的主从模式等。
+
+  - ###### 校验
+
+    ​    校验法即通过校验码的数学计算方式，对出现丢失、损坏的数据进行校验、还原。注意，这里有两个作用，一个校验，通过对数据进行校验和（checksum）计算，可以检查数据是否完整，有无损坏或更改，在数据传输和保存时经常用到，如 TCP 协议；二是回复还原，通过对数据结合校验码，通过数学计算，还原丢失或损坏的数据，可以在保证数据可靠性的前提下，降低冗余，如单机硬盘存储中的 RAID 技术、纠删码（Erasure Code）等。
+
+- ###### 分布式 MinIO 的优势
+
+  - ###### 数据保护
+
+    分布式 MinIO 采用纠删码来防范多个节点宕机和位衰减 bit rot。
+
+    分布式 MinIO 至少需要4个硬盘，使用分布式 MinIO 自动引入了纠删码功能。
+
+    | 服务器数 | 每个服务器的最小驱动器数 |
+    | -------- | ------------------------ |
+    | 2        | 2                        |
+    | 3        | 2                        |
+    | 4        | 1                        |
+
+  - ###### 高可用
+
+    ​    单机 MinIO 服务存在单点故障，相反，如果是一个有 N 块硬盘的分布式 MinIO，只要有 N/2 硬盘在线，你的数据就是安全的。不过你需要至少有 N/2+1 个硬盘来创建新的对象。
+
+  - ###### 一致性
+
+    ​    MinIO 在分布式和单机模式下，所有读写操作都严格遵守 read-after-write（先写后读） 一致性模型。
+
+- ###### 运行分布式 MinIO
+
+  ​    启动一个分布式 MinIO 实例，只需要把硬盘位置作为参数传给 ```minio server``` 命令即可，然后，需要在所有其他节点运行同样的命令。
+
+  - 分布式 MinIO 里所有的节点需要同样的```MINIO_ROOT_USER```和 ```MINIO_ROOT_PASSWD```，这样节点才能建立联接。为了实现这个，你需要在执行 ```minio server```之前，先将 ```MINIO_ROOT_USER``` 和 ```MINIO_ROOT_PASSWD``` 设为环境变量
+  - 分布式 MinIO 使用的磁盘里必须是干净的，里面没有数据。
+  - 分布式 MinIO 里的节点时间差不能超过 3 秒，可以使用 NTP 来保证时间一致。
+
+
+
+示例：4节点，每节点4块盘
+
+```shell
+export MINIO_ROOT_USER=minio
+export MINIO_ROOT_PASSWD=minioadmin
+minio server http://192.168.1.11/export1 http://192.168.1.11/export2 http://192.168.1.11/export3 http://192.168.1.11/export4
+             http://192.168.1.12/export1 http://192.168.1.12/export2 http://192.168.1.12/export3 http://192.168.1.12/export4
+             http://192.168.1.13/export1 http://192.168.1.13/export2 http://192.168.1.13/export3 http://192.168.1.13/export4
+             http://192.168.1.14/export1 http://192.168.1.14/export2 http://192.168.1.14/export3 http://192.168.1.14/export4
+```
+
+
+
+![FourServer](.pictures/FourServer.png)
 
 ##### 2.3 扩展分布式集群（多集群）
 
 ```text
   添加新的服务器池需要同时重启部署中的所有 MinIO 节点。
 
-  MinIO 强烈建议同时重启所有节点。 MinIO 操作是原子的并且是严格一致的。因此，重新启动过程不会中断应用程序和正在进行的操作。
+   MinIO 强烈建议同时重启所有节点。 MinIO 操作是原子的并且是严格一致的。因此，重新启动过程不会中断应用程序和正在进行的操作。
 
-  不要执行“滚动”（例如一次一个节点）重新启动。
+   不要执行“滚动”（例如一次一个节点）重新启动。
   
-  更新任何负载均衡器、反向代理或其他网络控制平面，以将客户端请求路由到 MinIO 分布式部署中的新主机。虽然 MinIO 在内部自动管理路由，但让控制平面处理初始连接管理可能会减少网络跃点并提高效率
+   更新任何负载均衡器、反向代理或其他网络控制平面，以将客户端请求路由到 MinIO 分布式部署中的新主机。虽然 MinIO 在内部自动管理路由，但让控制平面处理初始连接管理可能会减少网络跃点并提高效率。
+```
+
+例如我们是通过区的方式启动 MinIO 集群：
+
+```shell
+export MINIO_ROOT_USER=minio
+export MINIO_ROOT_PASSWD=minioadmin
+
+minio server http://host{1...32}/export{1...32}
+```
+
+MinIO 支持通过命令，指定新的集群来扩展现有集群（纠删码模式）：
+
+```shell
+export MINIO_ROOT_USER=minio
+export MINIO_ROOT_PASSWD=minioadmin
+
+minio server http://host{1...32}/export{1...32} http://host{33...64}/export{1...32}
+```
+
+现在整个集群就扩展了 1024 个磁盘，总磁盘变为 2048，新的对象上传请求会自动分配到最少使用的集群上。通过以上扩展策略，就可以进行集群扩展。重新配置后重启集群，会立即在集群中生效，并对现有集群无影响。如上命令中，我们可以吧原来的集群看作一个区，新增集群看作另一个区，新对象按每个区域中的可用空间比例放置在区域中，基于确定性哈希算法确定位置
+
+```
+说明：添加的每个区域必须具有与原始区域相同的磁盘数量（纠删码集 SLA）大小，以便维持相同的数据冗余。
+
+例如：第一个区有8个磁盘，可以将集群扩展为16个、32个或1024个，只需要确保部署的 SLA 是原始区域的倍数即可。
 ```
 
 ##### 2.4 硬件故障恢复
